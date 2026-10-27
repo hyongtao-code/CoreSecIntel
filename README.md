@@ -41,12 +41,27 @@ pip install -r requirements.txt
 
 ```bash
 # 交互式：会提示输入邮箱客户端授权密码
+# LLM 密钥从环境变量 MINIMAX_CN_API_KEY 读取
+export MINIMAX_CN_API_KEY=***
 python3 scripts/setup_env.py \
     --email huangyongtao_ee@163.com \
     --to   huangyongtao@caict.ac.cn
 ```
 
+也可以直接显式传入（适合 CI / 容器等不方便设环境变量的场景）：
+
+```bash
+# 显式传入时用 shell 变量，避免把密钥留在 shell 历史里
+read -rs LLM_KEY && export LLM_KEY
+python3 scripts/setup_env.py \
+    --email huangyongtao_ee@163.com \
+    --to   huangyongtao@caict.ac.cn \
+    --llm-key "$LLM_KEY"
+```
+
 生成的 `.env` 权限为 `600`，**已被 `.gitignore` 排除，不会进入版本库**。
+
+> 脚本只依赖 Python 标准库，不依赖任何特定工具链或 agent 框架。
 
 > **网易 163 邮箱**：必须使用「客户端授权密码」而非账号登录密码。
 > 获取路径：登录 163 网页版 → 设置 → POP3/SMTP/IMAP → 开启 SMTP → 生成授权密码。
@@ -127,6 +142,50 @@ sources:
 - `context_keywords`：电信语境标志词，同时用于剔除通用互联网安全内容
 - `exclusions`：命中即排除
 - `scoring.weights`：评分权重（相关性 40% / 新颖性 25% / 影响 20% / 来源可信度 15%）
+
+---
+
+## 独立部署
+
+本项目是**自包含的 Python 应用**，不依赖任何 agent 框架、SDK 或外部运行时，
+可直接部署到任意 Linux 服务器 / 容器：
+
+- 核心代码只依赖标准库 + `requests` / `PyYAML` / `Jinja2` / `beautifulsoup4`
+- 辅助脚本（`setup_env.py` / `probe_llm.py`）同样是纯标准库实现
+- 密钥来源与框架无关：LLM 密钥读环境变量 `MINIMAX_CN_API_KEY`（或 `--llm-key`），
+  SMTP 密码存项目 `.env`
+
+从零克隆部署：
+
+```bash
+git clone git@github.com:hyongtao-code/CoreSecIntel.git
+cd CoreSecIntel
+
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+
+# 准备参数（授权密码用 read 静默输入，避免留在 shell 历史里）
+read -rp "发件邮箱: " MAIL_USER
+read -rp "收件邮箱: " MAIL_TO
+read -rsp "客户端授权密码: " MAIL_PASSWORD && echo
+
+# 生成 .env（LLM 密钥来自环境变量）
+export MINIMAX_CN_API_KEY=*** python3 scripts/setup_env.py \
+    --email "$MAIL_USER" --to "$MAIL_TO" --app-password "$MAIL_PASSWORD"
+
+# 验证 SMTP 通路
+bash scripts/send_test_mail.sh
+
+# 试跑一次（不发送）
+bash scripts/run_daily.sh --dry-run
+
+# 安装每日定时任务
+bash scripts/install_cron.sh
+```
+
+容器化部署同样可行：把仓库 COPY 进镜像，`pip install -r requirements.txt`，
+以 `bash scripts/run_daily.sh` 作为入口，`cron` 或宿主机定时器触发即可。
 
 ---
 

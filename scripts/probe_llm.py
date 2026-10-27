@@ -1,29 +1,18 @@
 #!/usr/bin/env python3
-"""探测可用的 LLM 端点与模型（不打印密钥明文）。"""
+"""探测可用的 LLM 端点与模型（不打印密钥明文）。
+
+密钥从环境变量 ``MINIMAX_CN_API_KEY`` 读取（可用 ``--api-key`` 覆盖）。
+不依赖任何特定工具链，纯标准库实现。
+"""
 
 from __future__ import annotations
 
+import argparse
 import json
 import os
+import sys
 import urllib.error
 import urllib.request
-
-
-def read_env_value(path: str, name: str) -> str:
-    """从 env 文件读取某个变量（兼容 export 前缀与引号）。"""
-    if not os.path.exists(path):
-        return ""
-    with open(path, encoding="utf-8") as handle:
-        for line in handle:
-            line = line.strip()
-            if line.startswith("export "):
-                line = line[7:].strip()
-            if not line or line.startswith("#") or "=" not in line:
-                continue
-            key, _, value = line.partition("=")
-            if key.strip() == name:
-                return value.strip().strip('"').strip("'")
-    return ""
 
 
 def probe(base: str, key: str, model: str) -> None:
@@ -54,9 +43,21 @@ def probe(base: str, key: str, model: str) -> None:
 
 
 def main() -> int:
-    key = read_env_value(os.path.expanduser("~/.hermes/.env"), "MINIMAX_CN_API_KEY")
+    parser = argparse.ArgumentParser(description="探测 LLM 端点可用性")
+    parser.add_argument(
+        "--api-key",
+        default="",
+        help="API Key，缺省从环境变量 MINIMAX_CN_API_KEY 读取",
+    )
+    args = parser.parse_args()
+
+    key = (args.api_key or os.environ.get("MINIMAX_CN_API_KEY", "")).strip()
     print(f"MINIMAX_CN_API_KEY: found={bool(key)} len={len(key)}")
     if not key:
+        print(
+            "提示：设置环境变量 MINIMAX_CN_API_KEY，或用 --api-key 指定。",
+            file=sys.stderr,
+        )
         return 1
 
     print("\n=== https://api.minimaxi.com/v1 ===")

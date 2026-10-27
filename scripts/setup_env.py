@@ -1,9 +1,14 @@
 #!/usr/bin/env python3
-"""生成 .env：从 ~/.hermes/.env 读取 LLM 密钥，SMTP 密码由用户填入。
+"""生成 .env：LLM 密钥从环境变量读取，SMTP 密码由用户填入。
 
 用法：
-    python3 scripts/setup_env.py --email <你的gmail地址> --to <收件人>
-    python3 scripts/setup_env.py --email <gmail> --app-password <应用专用密码>
+    # 从环境变量 MINIMAX_CN_API_KEY 读取 LLM 密钥
+    MINIMAX_CN_API_KEY=xxx python3 scripts/setup_env.py --email <邮箱> --to <收件人>
+
+    # 或显式传入
+    python3 scripts/setup_env.py --email <邮箱> --to <收件人> --llm-key <LLM_KEY>
+
+不依赖任何特定工具链，纯标准库实现。
 """
 
 from __future__ import annotations
@@ -16,23 +21,6 @@ from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 ENV_PATH = PROJECT_ROOT / ".env"
-
-
-def read_env_value(path: str, name: str) -> str:
-    """从 env 文件读取变量（兼容 export 前缀、引号）。"""
-    if not os.path.exists(path):
-        return ""
-    with open(path, encoding="utf-8") as handle:
-        for line in handle:
-            line = line.strip()
-            if line.startswith("export "):
-                line = line[7:].strip()
-            if not line or line.startswith("#") or "=" not in line:
-                continue
-            key, _, value = line.partition("=")
-            if key.strip() == name:
-                return value.strip().strip('"').strip("'")
-    return ""
 
 
 TEMPLATE = """# ============================================================================
@@ -98,7 +86,11 @@ def main() -> int:
     parser.add_argument("--email", required=True, help="Gmail 地址（发件人）")
     parser.add_argument("--to", default="", help="收件人，逗号分隔；缺省与 --email 相同")
     parser.add_argument("--app-password", default="", help="Gmail 应用专用密码")
-    parser.add_argument("--llm-key", default="", help="LLM Key，缺省从 ~/.hermes/.env 读取")
+    parser.add_argument(
+        "--llm-key",
+        default="",
+        help="LLM Key，缺省从环境变量 MINIMAX_CN_API_KEY 读取",
+    )
     parser.add_argument("--ieee-key", default="", help="IEEE Xplore API Key（可选）")
     parser.add_argument("--force", action="store_true", help="覆盖已存在的 .env")
     args = parser.parse_args()
@@ -107,11 +99,13 @@ def main() -> int:
         print(f"{ENV_PATH} 已存在。加 --force 覆盖。")
         return 1
 
-    llm_key = args.llm_key or read_env_value(
-        os.path.expanduser("~/.hermes/.env"), "MINIMAX_CN_API_KEY"
-    )
+    llm_key = args.llm_key or os.environ.get("MINIMAX_CN_API_KEY", "").strip()
     if not llm_key:
-        print("错误：找不到 LLM API Key，请用 --llm-key 指定", file=sys.stderr)
+        print(
+            "错误：找不到 LLM API Key。请设置环境变量 MINIMAX_CN_API_KEY，"
+            "或用 --llm-key 指定。",
+            file=sys.stderr,
+        )
         return 2
 
     app_password = args.app_password
