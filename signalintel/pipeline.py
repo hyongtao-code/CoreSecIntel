@@ -15,6 +15,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Optional
 
+from signalintel.archive import ReportArchive
 from signalintel.collectors.base import CollectorResult
 from signalintel.config import AppConfig
 from signalintel.llm.client import LLMClient, LLMError
@@ -63,6 +64,7 @@ class PipelineResult:
 
     observations: list[str] = field(default_factory=list)
     report_path: Optional[str] = None
+    archive_path: Optional[str] = None
     subject: str = ""
     email_sent: bool = False
     email_error: Optional[str] = None
@@ -248,7 +250,19 @@ class Pipeline:
         result.report_path = str(report_path)
         logger.info("报告已生成: %s", report_path)
 
-        # 10) 落库
+        # 10) 文件化归档（HTTP 页面直接读这里，不依赖数据库）
+        try:
+            archive = ReportArchive(self.config.data_dir / "archive")
+            entry = archive.save(
+                report_data,
+                report_path.read_text(encoding="utf-8"),
+                result.subject,
+            )
+            result.archive_path = str(entry.path)
+        except Exception as exc:  # noqa: BLE001 - 归档失败不应丢失报告
+            logger.error("归档失败: %s", exc)
+
+        # 11) 落库
         self._persist(result)
 
         return result

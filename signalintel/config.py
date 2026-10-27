@@ -272,6 +272,8 @@ class AppConfig:
     sources_raw: dict[str, Any] = field(default_factory=dict)
     keywords_raw: dict[str, Any] = field(default_factory=dict)
     email_raw: dict[str, Any] = field(default_factory=dict)
+    schedule_raw: dict[str, Any] = field(default_factory=dict)
+    web_raw: dict[str, Any] = field(default_factory=dict)
 
     llm: LLMConfig = field(default_factory=LLMConfig)
     smtp: SMTPConfig = field(default_factory=SMTPConfig)
@@ -311,6 +313,7 @@ def load_config(config_dir: Optional[Path] = None) -> AppConfig:
     sources_raw = load_yaml(config_dir / "sources.yaml")
     keywords_raw = load_yaml(config_dir / "keywords.yaml")
     email_raw = load_yaml(config_dir / "email.yaml")
+    schedule_raw = load_yaml(config_dir / "schedule.yaml")
 
     data_dir = Path(str(_env("DATA_DIR", DEFAULT_DATA_DIR))).expanduser()
     log_dir = Path(str(_env("LOG_DIR", DEFAULT_LOG_DIR))).expanduser()
@@ -325,6 +328,8 @@ def load_config(config_dir: Optional[Path] = None) -> AppConfig:
         sources_raw=sources_raw,
         keywords_raw=keywords_raw,
         email_raw=email_raw,
+        schedule_raw=schedule_raw,
+        web_raw=schedule_raw.get("web", {}) or {},
         llm=LLMConfig.from_env(),
         smtp=SMTPConfig.from_env(email_raw.get("email")),
     )

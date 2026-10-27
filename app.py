@@ -27,6 +27,7 @@ from __future__ import annotations
 import argparse
 import logging
 import sys
+import time
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional
@@ -41,7 +42,12 @@ from signalintel.notifications.email_sender import EmailSender  # noqa: E402
 from signalintel.pipeline import Pipeline  # noqa: E402
 from signalintel.storage.database import Database  # noqa: E402
 from signalintel.storage.repository import Repository  # noqa: E402
-from signalintel.utils.dates import ensure_aware, now_in_tz, parse_date_string  # noqa: E402
+from signalintel.utils.dates import (  # noqa: E402
+    ensure_aware,
+    get_tz,
+    now_in_tz,
+    parse_date_string,
+)
 from signalintel.utils.http import HttpClient  # noqa: E402
 
 logger = logging.getLogger("signalintel")
@@ -344,6 +350,176 @@ def cmd_init(args: argparse.Namespace, config: AppConfig) -> int:
     return 0
 
 
+def cmd_serve(args: argparse.Namespace, config: AppConfig) -> int:
+    """启动周期调度 + HTTP 服务（一条命令搞定）。"""
+    import signal
+
+    from signalintel.archive import ReportArchive
+    from signalintel.scheduler import ScheduleConfig, Scheduler
+    from signalintel.webserver import WebServer
+
+    schedule_raw = dict(config.schedule_raw.get("schedule", {}) or {})
+    web_raw = dict(config.web_raw or {})
+
+    # 命令行覆盖 YAML
+    if getattr(args, "no_schedule", False):
+        schedule_raw["enabled"] = False
+    if getattr(args, "no_web", False):
+        web_raw["enabled"] = False
+    if getattr(args, "host", None):
+        web_raw["host"] = args.host
+    if getattr(args, "port", None):
+        web_raw["port"] = args.port
+
+    try:
+        schedule = ScheduleConfig.from_mapping(schedule_raw)
+    except ValueError as exc:
+        logger.error("调度配置有误: %s", exc)
+        return 2
+
+    archive = ReportArchive(config.data_dir / "archive")
+
+    logger.info("=" * 60)
+    logger.info("核心网信令安全情报自动订阅系统 —— 常驻服务")
+    logger.info("=" * 60)
+    logger.info(
+        "调度频率: %s %s%s",
+        schedule.frequency,
+        schedule.run_at,
+        f"（{schedule.weekday}）" if schedule.frequency == "weekly" else "",
+    )
+    logger.info("归档目录: %s", archive.root)
+    existing = archive.list()
+    logger.info("已有归档: %s 期", len(existing))
+    if existing:
+        logger.info("最近一期: %s", existing[0].report_date)
+
+    # ---- HTTP 服务 ----
+    web_server: Optional[WebServer] = None
+    if web_raw.get("enabled", True):
+        host = str(web_raw.get("host", "127.0.0.1"))
+        port = int(web_raw.get("port", 8765))
+        web_server = WebServer(archive, host=host, port=port)
+        web_server.start_background()
+        logger.info("HTTP 服务: %s", web_server.url)
+        logger.info("  列表页 : %s", web_server.url)
+        logger.info("  最新一期: %s/r/%s", web_server.url, existing[0].report_date if existing else "<待生成>")
+    else:
+        logger.info("HTTP 服务已禁用")
+
+    # ---- 调度器 ----
+    scheduler: Optional[Scheduler] = None
+    if schedule.enabled and schedule_raw.get("enabled", True):
+        scheduler = Scheduler(
+            job=lambda when: _run_scheduled_task(config, when),
+            config=schedule,
+        )
+        scheduler.start()
+        logger.info("下次运行: %s", scheduler.next_run().strftime("%Y-%m-%d %H:%M"))
+    else:
+        logger.info("周期调度已禁用")
+
+    if web_server is None and scheduler is None:
+        logger.error("调度与 HTTP 服务都未启用，无事可做。退出。")
+        return 2
+
+    # --run-now：立即执行一次完整任务（采集 → 报告 → 发信）
+    if getattr(args, "run_now", False):
+        logger.info("立即执行一次任务…")
+        try:
+            _run_scheduled_task(config, now_in_tz(config.timezone))
+        except Exception as exc:  # noqa: BLE001
+            logger.exception("立即执行失败: %s", exc)
+
+    # ---- 等待退出 ----
+    logger.info("服务运行中，按 Ctrl+C 退出")
+    try:
+        while True:
+            time.sleep(1)
+    except KeyboardInterrupt:
+        logger.info("收到中断信号，正在退出…")
+
+    if scheduler is not None:
+        scheduler.stop()
+    if web_server is not None:
+        web_server.shutdown()
+    logger.info("已退出")
+    return 0
+
+
+def _run_scheduled_task(config: AppConfig, when: datetime) -> None:
+    """调度任务：采集 → 分析 → 报告 → 归档 → 发邮件。
+
+    复用 ``cmd_run`` 的完整流程，保证行为与手动运行完全一致。
+    """
+    from signalintel.collectors.registry import build_collectors, run_collectors
+    from signalintel.llm.client import LLMClient
+    from signalintel.pipeline import Pipeline
+    from signalintel.storage.database import Database
+    from signalintel.storage.repository import Repository
+    from signalintel.utils.http import HttpClient
+
+    tz = config.timezone
+    end = when.astimezone(get_tz(tz))
+    start = end - timedelta(days=config.window_days)
+
+    logger.info("=== 调度任务开始（窗口 %s ~ %s）===", start, end)
+
+    db = Database(config.db_path)
+    db.migrate()
+    repository = Repository(db)
+    run_id = repository.start_run(start, end, tz, mode="scheduled")
+
+    http_client = HttpClient(timeout=30.0, max_retries=3, min_interval=1.0)
+    collectors = build_collectors(config.sources, http_client=http_client)
+    collector_results = run_collectors(collectors, start, end)
+
+    llm = LLMClient(config.llm) if config.llm.is_configured else None
+    pipeline = Pipeline(config, repository, llm=llm)
+    result = pipeline.run(
+        collector_results,
+        start,
+        end,
+        mode="scheduled",
+        report_date=end.strftime("%Y-%m-%d"),
+    )
+    result.run_id = run_id
+
+    if config.smtp.is_configured:
+        html = Path(result.report_path).read_text(encoding="utf-8")
+        send_result = EmailSender(config.smtp).send(result.subject, html)
+        if send_result.success:
+            result.email_sent = True
+            logger.info("邮件已发送: %s", ", ".join(send_result.recipients))
+        else:
+            result.email_error = send_result.error
+            logger.error("邮件发送失败: %s", send_result.error)
+        repository.record_sent_report(
+            run_id=run_id,
+            report_date=result.report_date,
+            subject=result.subject,
+            recipients=send_result.recipients,
+            item_count=result.total_selected,
+            status="sent" if send_result.success else "failed",
+            error=send_result.error,
+        )
+    else:
+        logger.warning("SMTP 配置不完整，跳过邮件发送")
+
+    repository.update_run(
+        run_id,
+        status="completed",
+        email_sent=1 if result.email_sent else 0,
+        error=result.email_error,
+    )
+
+    if llm is not None:
+        llm.close()
+    http_client.close()
+    db.close()
+    logger.info("=== 调度任务结束（入选 %s 条）===", result.total_selected)
+
+
 # ---------------------------------------------------------------------------
 # 参数解析
 # ---------------------------------------------------------------------------
@@ -395,6 +571,29 @@ def build_parser() -> argparse.ArgumentParser:
 
     init_parser = sub.add_parser("init", help="初始化数据库")
     init_parser.set_defaults(func=cmd_init)
+
+    serve_parser = sub.add_parser(
+        "serve",
+        help="启动周期调度 + HTTP 归档页面（常驻服务）",
+    )
+    serve_parser.add_argument(
+        "--host", help="HTTP 监听地址，覆盖 config/schedule.yaml"
+    )
+    serve_parser.add_argument(
+        "--port", type=int, help="HTTP 监听端口，覆盖 config/schedule.yaml"
+    )
+    serve_parser.add_argument(
+        "--no-web", action="store_true", help="不启动 HTTP 服务，只跑调度"
+    )
+    serve_parser.add_argument(
+        "--no-schedule", action="store_true", help="不启动调度，只提供 HTTP 服务"
+    )
+    serve_parser.add_argument(
+        "--run-now",
+        action="store_true",
+        help="立即执行一次采集+发信，然后进入常驻等待",
+    )
+    serve_parser.set_defaults(func=cmd_serve)
 
     return parser
 
