@@ -1,0 +1,43 @@
+# ============================================================================
+# 邮件发送配置
+#
+# 由 app.py / scripts/send_test_mail.sh 读取。
+#
+# 说明：
+#   - 本文件只放**非机密**配置（服务器、端口、收件人、主题前缀等）。
+#   - 密码等凭证**不写在本文件**，通过 password_env 指定的环境变量名读取
+#     （默认 SMTP_PASSWORD），实际值放在项目根目录的 .env 里。
+#   - 环境变量优先级高于本文件，改 .env 即可覆盖，无需动这里。
+#
+# 网易 163 邮箱需要「客户端授权密码」：
+#   登录 163 邮箱 → 设置 → POP3/SMTP/IMAP → 开启 SMTP → 生成授权密码
+# ============================================================================
+
+email:
+  # 是否启用邮件发送（false 时只生成报告不发信）
+  enabled: true
+
+  smtp:
+    host: smtp.163.com
+    # 465 = 隐式 SSL；25/587 = STARTTLS
+    port: 465
+    # 端口 465 通常用隐式 SSL；端口 587 用 STARTTLS
+    use_ssl: true
+    use_tls: true
+    # SMTP 登录账号
+    user: huangyongtao_ee@163.com
+    # 密码从该环境变量读取（不要把密码直接写在本文件）
+    password_env: SMTP_PASSWORD
+
+  # 发件人地址（建议与 smtp.user 一致，否则可能被拒收或进垃圾箱）
+  from: huangyongtao_ee@163.com
+
+  # 收件人列表
+  to:
+    - huangyongtao@caict.ac.cn
+
+  # 邮件主题前缀（后面自动拼接日期与条目数）
+  subject_prefix: 【核心网信令安全周报】
+
+  # 邮件头部的署名
+  sender_name: 核心网信令安全周报

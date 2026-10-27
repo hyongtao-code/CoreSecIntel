@@ -1,0 +1,218 @@
+# ============================================================================
+# 数据源配置
+#
+# 启用/禁用某个来源：把 enabled 设为 true / false 即可。
+# 新增来源：在 collectors/ 下实现适配器，在 collectors/registry.py 注册，
+#           然后在此处添加一个条目即可，无需修改核心处理流程。
+#
+# 通用字段：
+#   type          适配器类型（arxiv / crossref / semantic_scholar / ieee /
+#                 nvd / rss / web）
+#   enabled       是否启用
+#   display_name  报告中展示的来源名称
+#   url           rss / web 类型必填
+#   trust         来源可信度基准（0-1），参与综合评分
+#   max_items     该来源单次最多采集条数
+#   params        传给适配器的附加参数
+#   api_key_env   需要密钥的来源，从该环境变量读取密钥
+# ============================================================================
+
+sources:
+
+  # --------------------------------------------------------------------------
+  # 学术论文
+  # --------------------------------------------------------------------------
+
+  arxiv:
+    type: arxiv
+    enabled: true
+    display_name: arXiv
+    trust: 0.85
+    max_items: 60
+    params:
+      max_results: 80
+      # arXiv 官方要求请求间隔 >= 3 秒（否则 503/429），且跨网访问时
+      # 首字节可能很慢，超时需要放宽。
+      request_interval: 3.5
+      request_timeout: 120
+      query: >-
+        (all:"signaling" OR all:"signalling" OR all:"SS7" OR all:"Diameter"
+        OR all:"GTP" OR all:"PFCP" OR all:"SIP" OR all:"IMS" OR all:"5G core"
+        OR all:"mobile core network" OR all:"telecom")
+        AND
+        (all:"security" OR all:"attack" OR all:"vulnerability" OR all:"fuzzing"
+        OR all:"privacy" OR all:"intrusion detection" OR all:"anomaly detection"
+        OR all:"authentication bypass")
+
+  crossref:
+    type: crossref
+    enabled: true
+    display_name: Crossref
+    trust: 0.90
+    max_items: 60
+    params:
+      rows: 60
+      # 检索式使用「电信专用」组合词，避免拉入材料科学 / 生物学的同形词论文
+      # （例如化学里的 "Diameter Control of Nanorods"、生物学里的 "MAP"）。
+      query: >-
+        ("signaling security" OR "signalling security" OR "core network security"
+        OR "SS7 attack" OR "Diameter protocol" OR "GTP-C" OR "PFCP"
+        OR "5G core network" OR "IMS security" OR "mobile core network")
+        AND
+        ("vulnerability" OR "attack" OR "fuzzing" OR "intrusion detection"
+        OR "privacy" OR "authentication bypass" OR "threat")
+
+  semantic_scholar:
+    type: semantic_scholar
+    enabled: true
+    display_name: Semantic Scholar
+    trust: 0.85
+    max_items: 50
+    params:
+      limit: 60
+      query: >-
+        ("signaling security" OR "core network security" OR "SS7"
+        OR "Diameter protocol" OR "GTP-C" OR "PFCP" OR "5G core network"
+        OR "IMS security" OR "mobile core network" OR "NGAP")
+        AND
+        ("vulnerability" OR "attack" OR "fuzzing" OR "intrusion detection"
+        OR "privacy" OR "authentication" OR "threat detection")
+
+  # 需要申请免费 API Key：https://ieeexploreapi.ieee.org/
+  ieee:
+    type: ieee
+    enabled: false
+    display_name: IEEE Xplore
+    trust: 0.92
+    max_items: 40
+    api_key_env: IEEE_API_KEY
+    params:
+      api_key_env: IEEE_API_KEY
+      query: >-
+        ("signaling security" OR "core network security" OR "SS7" OR "Diameter"
+        OR "GTP-C" OR "PFCP" OR "SIP" OR "5G core" OR "IMS")
+        AND
+        ("vulnerability" OR "attack" OR "fuzzing" OR "intrusion detection"
+        OR "privacy" OR "authentication")
+
+  # --------------------------------------------------------------------------
+  # 漏洞与官方公告
+  # --------------------------------------------------------------------------
+
+  nvd:
+    type: nvd
+    enabled: true
+    display_name: NVD / CVE
+    trust: 0.95
+    max_items: 80
+    params:
+      page_size: 200
+      keywords:
+        - SS7
+        - MAP
+        - Diameter
+        - GTP-C
+        - GTP-U
+        - PFCP
+        - SIP
+        - IMS
+        - TCAP
+        - SCCP
+        - NGAP
+        - NAS
+        - telecom
+        - mobile network
+        - core network
+        - signaling
+        - roaming
+        - 5G LTE
+
+  # --------------------------------------------------------------------------
+  # 安全新闻与研究机构报告
+  # --------------------------------------------------------------------------
+
+  hackernews:
+    type: rss
+    enabled: true
+    display_name: The Hacker News
+    trust: 0.70
+    url: https://feeds.feedburner.com/TheHackersNews
+    max_items: 40
+    params: {}
+
+  bleepingcomputer:
+    type: rss
+    enabled: true
+    display_name: BleepingComputer
+    trust: 0.70
+    url: https://www.bleepingcomputer.com/feed/
+    max_items: 40
+    params: {}
+
+  securityweek:
+    type: rss
+    enabled: false
+    display_name: SecurityWeek
+    trust: 0.68
+    url: https://www.securityweek.com/feed/
+    max_items: 30
+    params: {}
+
+  therecord:
+    type: rss
+    enabled: false
+    display_name: The Record
+    trust: 0.72
+    url: https://therecord.media/feed
+    max_items: 30
+    params: {}
+
+  # Citizen Lab 公开电信安全研究报告
+  citizenlab:
+    type: rss
+    enabled: true
+    display_name: Citizen Lab
+    trust: 0.88
+    url: https://citizenlab.ca/feed/
+    max_items: 30
+    params: {}
+
+  # GSMA 官方报告（网页解析，无 API）
+  gsma:
+    type: web
+    enabled: false
+    display_name: GSMA
+    trust: 0.90
+    url: https://www.gsma.com/solutions-and-impact/technologies/security/gsma-security-official-reports/
+    max_items: 20
+    title_selector: "h1.entry-title, h1"
+    content_selector: "article, .entry-content"
+    date_selector: "time, .entry-date"
+    params:
+      content_type: report
+
+  # 3GPP 规范更新（网页解析）
+  threegpp:
+    type: web
+    enabled: false
+    display_name: 3GPP
+    trust: 0.95
+    url: https://www.3gpp.org/dynareport?code=33-series.htm
+    max_items: 20
+    title_selector: "h1, .doc-title"
+    content_selector: "#content, .document"
+    params:
+      content_type: standard
+
+  # ITU-T 电信安全研究（网页解析）
+  itut:
+    type: web
+    enabled: false
+    display_name: ITU-T
+    trust: 0.95
+    url: https://www.itu.int/rec/T-REC-S/en
+    max_items: 20
+    title_selector: "h1, .title"
+    content_selector: "main, #content"
+    params:
+      content_type: standard

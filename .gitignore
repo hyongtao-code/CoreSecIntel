@@ -1,0 +1,45 @@
+# ============================================================================
+# 密钥与本地数据 —— 绝不提交
+# ============================================================================
+
+# 环境变量文件（含 LLM 密钥、SMTP 密码）
+.env
+.env.*
+!.env.example
+
+# 数据库
+data/
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+
+# 运行时产物
+logs/
+*.log
+reports/
+*.html
+!signalintel/reports/templates/*.html
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# 编辑器 / 系统
+.vscode/
+.idea/
+*.swp
+.DS_Store
+
+# 临时脚本
+/tmp/

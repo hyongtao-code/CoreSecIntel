@@ -1,0 +1,22 @@
+# 核心网信令安全情报自动订阅系统 —— 依赖清单
+#
+# 安装：
+#   python3 -m venv .venv && source .venv/bin/activate
+#   pip install -r requirements.txt
+#
+# 要求 Python 3.11+
+
+# HTTP 采集
+requests>=2.31,<3.0
+
+# 配置文件解析
+PyYAML>=6.0,<7.0
+
+# HTML 报告模板渲染
+Jinja2>=3.1,<4.0
+
+# 网页正文解析（web 采集器）
+beautifulsoup4>=4.12,<5.0
+
+# 测试
+pytest>=8.0,<9.0

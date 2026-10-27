@@ -1,0 +1,320 @@
+# ============================================================================
+# 关键词库与评分配置
+#
+# 关键词用于第一阶段召回（大模型分类之前的成本控制）。
+# 匹配规则：
+#   - 大小写不敏感
+#   - 多词短语中间允许出现空格 / 连字符 / 下划线
+#   - 纯拉丁短缩写（MAP / SIP / IMS 等）要求全大写才匹配，避免误命中
+#     roadmap / relationship 之类的普通英文单词
+#   - 中文关键词按普通子串匹配
+#
+# 命中标题的权重高于命中摘要。
+# ============================================================================
+
+keywords:
+
+  # 命中数量下限（达到该数量才进入大模型分类阶段）
+  min_matches: 1
+
+  # 权重
+  title_weight: 3.0
+  abstract_weight: 1.0
+
+  # ------------------------------------------------------------------
+  # 核心网信令协议
+  # ------------------------------------------------------------------
+  protocols:
+    - SS7
+    - MAP
+    - TCAP
+    - SCCP
+    - SIGTRAN
+    - GTP-C
+    - GTP-U
+    - PFCP
+    - SIP
+    - IMS
+    - NAS
+    - NGAP
+    - S1AP
+    - SBA
+    - 5G Core
+    - 5G SBA
+    - HTTP/2-based SBI
+    - Mobile Core Network
+    - Evolved Packet Core
+
+  # ------------------------------------------------------------------
+  # 有歧义的关键词
+  #
+  # 这些词在学术/工程文献中常有完全无关的含义
+  # （Diameter 可指几何直径、纳米棒直径；MAP 可指映射 / 地图；
+  #   IMS 可指车载信息娱乐系统；NAS 可指网络附属存储），
+  # 因此必须同时命中下方 context_keywords 中的电信语境词，
+  # 才计为有效召回，避免把材料科学 / 生物学的论文拉进报告。
+  # ------------------------------------------------------------------
+  ambiguous:
+    - Diameter
+    - DRA
+    - DEA
+    - MAP
+
+  # 电信语境标志词（用于确认歧义关键词、以及漏洞条目确实指向电信领域）
+  context_keywords:
+    # 协议与接口
+    - SS7
+    - GTP-C
+    - GTP-U
+    - PFCP
+    - SIP
+    - IMS
+    - NAS
+    - NGAP
+    - S1AP
+    - 5G Core
+    - 5G SBA
+    - Diameter
+    - Diameter protocol
+    - TCAP
+    - SCCP
+    - SIGTRAN
+    - MAP protocol
+    - Mobile Core Network
+    - Evolved Packet Core
+    - SIP
+    - RADIUS
+    - GTP
+    - Diameter Base
+    - Sh interface
+    - Gn interface
+    - N8 interface
+    - N6 interface
+    # 架构与网元
+    - mobile core
+    - core network
+    - telecom
+    - cellular
+    - LTE
+    - roaming
+    - interworking
+    - signaling
+    - signalling
+    - subscriber
+    - IMSI
+    - base station
+    - carrier
+    - operator
+    - RAN
+    - vRAN
+    - Open RAN
+    - HSS
+    - MME
+    - AMF
+    - SMF
+    - UPF
+    - AUDF
+    - AUSF
+    - UDM
+    - UDR
+    - PCRF
+    - PCF
+    - NRF
+    - SCP
+    - MSC
+    - HLR
+    - VLR
+    - MMSC
+    - SCEF
+    - PGW
+    - SGW
+    # 电信业务与攻击面
+    - telecom fraud
+    - toll fraud
+    - SMS fraud
+    - call interception
+    - call hijacking
+    - SS7 attack
+    - signaling attack
+    - signaling firewall
+    - mobile network attack
+    - mobile subscriber
+    - SIM card
+    - eSIM
+    - SIM swap
+    - location tracking
+    - location privacy
+    - IMSI catcher
+    - fake base station
+    - rogue base station
+    - lawful intercept
+    - emergency call
+    - 911
+    - VoLTE
+    - VoNR
+    - network slicing
+    - private 5G
+    - MEC
+    - mobile network operator
+    - MNO
+    - MVNO
+    - wireline
+    - PSTN
+    - ISDN
+    - media gateway
+    - softswitch
+    - SIP trunk
+    - IPBX
+
+  # ------------------------------------------------------------------
+  # 核心网网元
+  # ------------------------------------------------------------------
+  network_elements:
+    - MME
+    - HSS
+    - PCRF
+    - SGW
+    - PGW
+    - AMF
+    - SMF
+    - UPF
+    - AUSF
+    - UDM
+    - UDR
+    - PCF
+    - NRF
+    - NSSF
+    - MSC
+    - HLR
+    - VLR
+    - SCEF
+    - MMSC
+    - SCP
+
+  # ------------------------------------------------------------------
+  # 攻击类型
+  # ------------------------------------------------------------------
+  # 注意：这里只放**电信语境专用**的攻击类型表述。
+  # "denial of service" / "authentication bypass" 这类通用安全术语
+  # 会把大量与电信无关的 CVE 和论文拉进报告，因此不放在这里——
+  # 它们由 context_keywords 的电信语境判定来间接支撑。
+  attack_types:
+    - signaling attack
+    - signalling attack
+    - signaling security
+    - signalling security
+    - protocol abuse
+    - protocol fuzzing
+    - protocol vulnerability
+    - message injection
+    - signaling spoofing
+    - signaling replay
+    - location tracking
+    - location leakage
+    - IMSI catcher
+    - fake base station
+    - base station spoofing
+    - SMS interception
+    - call hijacking
+    - rogue base station
+    - interworking attack
+    - traffic diversion
+    - subscriber privacy
+    - subscriber data leak
+    - mobile network attack
+    - carrier network attack
+    - telecom fraud
+    - SIM swap
+    - signaling firewall
+    - mobile core network security
+    - roaming security
+    - interconnect security
+    - operator security
+    - 5G security
+    - LTE security
+
+  # ------------------------------------------------------------------
+  # 主题词（研究方法、检测技术、前沿方向）
+  # ------------------------------------------------------------------
+  topics:
+    - telecom security
+    - core network security
+    - signaling firewall
+    - formal verification
+    - protocol implementation security
+    - attack surface analysis
+    - machine learning
+    - deep learning
+    - graph neural network
+    - threat intelligence
+    - large language model
+    - AI-assisted vulnerability discovery
+    - fuzzing campaign
+    - semantic analysis
+    - traffic analysis
+    - network function virtualization
+    - network slicing security
+    - private 5G security
+    - Open RAN security
+    - MEC security
+
+  # ------------------------------------------------------------------
+  # 中文关键词
+  # ------------------------------------------------------------------
+  chinese_keywords:
+    - 信令安全
+    - 信令攻击
+    - 核心网
+    - 核心网安全
+    - 信令防火墙
+    - 漫游攻击
+    - 协议漏洞
+    - 协议模糊测试
+    - 运营商安全
+    - 用户位置隐私
+    - IMSI
+    - 鉴权绕过
+    - 电信安全
+    - 5G核心网
+    - 网络切片安全
+    - 电信欺诈
+
+  # ------------------------------------------------------------------
+  # 排除词（命中即排除，优先级最高）
+  # 目的：避免退化成泛网络安全新闻聚合器
+  # ------------------------------------------------------------------
+  exclusions:
+    - ransomware
+    - phishing attack
+    - cryptojacking
+    - botnet
+    - browser exploit
+    - web application security
+    - cloud misconfiguration
+    - kubernetes cluster
+    - supply chain compromise
+    - data breach at retail
+    - consumer password
+    - home router
+    - smart home device
+    - antivirus
+    - malware analysis
+    - 勒索软件
+    - 钓鱼攻击
+
+# ============================================================================
+# 评分配置
+# ============================================================================
+scoring:
+  # 综合评分 0-100 的权重（总和应为 1.0）
+  weights:
+    relevance: 0.40       # 专业相关性
+    novelty: 0.25         # 技术新颖性
+    impact: 0.20          # 安全影响和威胁程度
+    source_trust: 0.15    # 来源可信度
+
+  # 低于该分数的条目不纳入邮件
+  min_score: 45.0
+
+  # 邮件中最多纳入的条目数
+  max_items: 30
