@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="x-apple-disable-message-reformatting">
+<title>核心网信令安全周报 {{ report_date }}</title>
+</head>
+<body style="margin:0;padding:0;background-color:#f2f4f7;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Hiragino Sans GB','Microsoft YaHei',Arial,sans-serif;-webkit-text-size-adjust:100%;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#f2f4f7;padding:16px 0;">
+<tr>
+<td align="center">
+<table role="presentation" width="680" cellpadding="0" cellspacing="0" border="0" style="width:680px;max-width:100%;background-color:#ffffff;border-radius:8px;overflow:hidden;box-shadow:0 1px 3px rgba(16,24,40,0.08);">
+
+  <!-- 头部 -->
+  <tr>
+  <td style="background-color:#0b3d6b;padding:24px 28px;">
+    <div style="color:#ffffff;font-size:21px;font-weight:700;line-height:1.4;letter-spacing:0.3px;">核心网信令安全周报</div>
+    <div style="color:#b9d4ec;font-size:13px;line-height:1.6;padding-top:6px;">
+      检索窗口：{{ window_start }} 至 {{ window_end }}（{{ r.timezone }}）　|　报告日期：{{ report_date }}
+    </div>
+  </td>
+  </tr>
+
+  <!-- 概览 -->
+  <tr>
+  <td style="padding:26px 28px 6px;">
+    <div style="font-size:16px;font-weight:700;color:#101828;padding-bottom:10px;border-bottom:2px solid #0b3d6b;">1. 本期概览</div>
+  </td>
+  </tr>
+  <tr>
+  <td style="padding:12px 28px 6px;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%;border-collapse:collapse;">
+      <tr>
+        {% for label, value in [
+          ('检索时间窗口', window_start_full ~ ' ~ ' ~ window_end_full ~ ' (' ~ r.timezone ~ ')'),
+          ('成功采集来源', r.sources_ok ~ ' 个' ~ ('（' ~ r.sources_failed ~ ' 个失败）' if r.sources_failed else '')),
+          ('候选内容数量', r.candidates ~ ' 条'),
+          ('去重后有效内容', r.after_dedup ~ ' 条'),
+          ('关键词筛选通过', r.after_filter ~ ' 条'),
+          ('优先级分布', 'P1 ' ~ r.p1_count ~ ' 条　P2 ' ~ r.p2_count ~ ' 条　P3 ' ~ r.p3_count ~ ' 条')
+        ] %}
+        <td style="padding:6px 0;font-size:14px;color:#475467;width:130px;vertical-align:top;">{{ label }}</td>
+        <td style="padding:6px 0;font-size:14px;color:#101828;">{{ value }}</td>
+      </tr>
+      {% endfor %}
+      {% if r.pending_count %}
+      <tr>
+        <td style="padding:6px 0;font-size:14px;color:#475467;vertical-align:top;">发布时间待核实</td>
+        <td style="padding:6px 0;font-size:14px;color:#b54708;">{{ r.pending_count }} 条（缺少可靠发布时间，未纳入本报告正文）</td>
+      </tr>
+      {% endif %}
+    </table>
+  </td>
+  </tr>
+
+  {% if r.total_items == 0 %}
+  <!-- 无高价值内容 -->
+  <tr>
+  <td style="padding:26px 28px;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%;background-color:#fffaeb;border:1px solid #fedf89;border-radius:6px;">
+      <tr>
+      <td style="padding:20px 22px;font-size:15px;color:#93370d;line-height:1.7;">
+        <strong>本期无高优先级更新。</strong><br>
+        检索窗口内未发现与核心网信令安全直接相关的高价值内容。为避免低质量内容稀释情报价值，本期不生成条目正文。
+      </td>
+      </tr>
+    </table>
+  </td>
+  </tr>
+  {% else %}
+
+  <!-- 高优先级情报 -->
+  {% if r.p1_items %}
+  <tr>
+  <td style="padding:26px 28px 6px;">
+    <div style="font-size:16px;font-weight:700;color:#101828;padding-bottom:10px;border-bottom:2px solid #b42318;">2. 高优先级情报（P1）</div>
+  </td>
+  </tr>
+  <tr>
+  <td style="padding:12px 28px 6px;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%;border-collapse:collapse;">
+      {% for item in r.p1_items %}
+      <tr>
+      <td style="padding:14px 0;border-bottom:1px solid #eaecf0;">
+        <div style="font-size:15px;font-weight:700;color:#101828;line-height:1.5;">
+          {{ item.title_cn if item.title_cn and item.title_cn != '未提及' else item.title }}
+        </div>
+        <div style="font-size:12px;color:#667085;padding-top:4px;line-height:1.6;font-style:italic;">
+          {{ item.title }}
+        </div>
+        <div style="padding:7px 0;font-size:12px;color:#475467;line-height:1.7;">
+          <span style="background-color:#fee4e2;color:#b42318;padding:1px 6px;border-radius:3px;font-weight:600;">{{ item.priority }}</span>
+          {% if item.score %}<span style="padding-left:8px;">评分 {{ item.score }}</span>{% endif %}
+          <span style="padding-left:8px;">{{ item.source }}</span>
+          {% if item.published_at %}<span style="padding-left:8px;">发布 {{ item.published_at.strftime('%Y-%m-%d') }}</span>{% else %}<span style="padding-left:8px;color:#b54708;">发布时间待核实</span>{% endif %}
+          {% if item.is_preprint %}<span style="padding-left:8px;color:#b54708;">预印本</span>{% endif %}
+          {% if item.cve_ids %}<span style="padding-left:8px;font-weight:700;color:#b42318;">{{ item.cve_ids | join(', ') }}</span>{% endif %}
+          {% if item.doi %}<span style="padding-left:8px;">DOI: {{ item.doi }}</span>{% endif %}
+        </div>
+        <div style="padding:4px 0;font-size:14px;color:#344054;line-height:1.75;">{{ item.summary_cn if item.summary_cn else '未提及' }}</div>
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%;margin-top:6px;">
+          {% if item.attack_surface and item.attack_surface != '未提及' %}
+          <tr><td style="padding:3px 0;font-size:13px;color:#475467;width:88px;vertical-align:top;">攻击面</td><td style="padding:3px 0;font-size:13px;color:#344054;">{{ item.attack_surface }}</td></tr>
+          {% endif %}
+          {% if item.technique and item.technique != '未提及' %}
+          <tr><td style="padding:3px 0;font-size:13px;color:#475467;vertical-align:top;">攻击原理</td><td style="padding:3px 0;font-size:13px;color:#344054;">{{ item.technique }}</td></tr>
+          {% endif %}
+          {% if item.impact and item.impact != '未提及' %}
+          <tr><td style="padding:3px 0;font-size:13px;color:#475467;vertical-align:top;">技术影响</td><td style="padding:3px 0;font-size:13px;color:#344054;">{{ item.impact }}</td></tr>
+          {% endif %}
+          {% if item.significance and item.significance != '未提及' %}
+          <tr><td style="padding:3px 0;font-size:13px;color:#475467;vertical-align:top;">安全意义</td><td style="padding:3px 0;font-size:13px;color:#344054;">{{ item.significance }}</td></tr>
+          {% endif %}
+          {% if item.recommendations and item.recommendations != '未提及' %}
+          <tr><td style="padding:3px 0;font-size:13px;color:#475467;vertical-align:top;">防御建议</td><td style="padding:3px 0;font-size:13px;color:#344054;">{{ item.recommendations }}</td></tr>
+          {% endif %}
+          {% if item.confidence_note and item.confidence_note != '未提及' %}
+          <tr><td style="padding:3px 0;font-size:13px;color:#475467;vertical-align:top;">可信度</td><td style="padding:3px 0;font-size:13px;color:#b54708;">{{ item.confidence_note }}</td></tr>
+          {% endif %}
+        </table>
+        <div style="padding:7px 0 0;font-size:13px;">
+          {% set link = safe_url(item.url) %}
+          {% if link %}
+          <a href="{{ link }}" target="_blank" style="color:#0b63ce;text-decoration:none;font-weight:600;">阅读原文 →</a>
+          {% endif %}
+          {% for alt in item.alternate_sources %}
+          {% set alt_link = safe_url(alt.url) %}
+          {% if alt_link %}
+          <a href="{{ alt_link }}" target="_blank" style="color:#667085;text-decoration:none;padding-left:12px;">{{ alt.source }}</a>
+          {% endif %}
+          {% endfor %}
+        </div>
+      </td>
+      </tr>
+      {% endfor %}
+    </table>
+  </td>
+  </tr>
+  {% endif %}
+
+  <!-- 学术论文精选 -->
+  {% if r.p2_items or r.p3_items %}
+  <tr>
+  <td style="padding:26px 28px 6px;">
+    <div style="font-size:16px;font-weight:700;color:#101828;padding-bottom:10px;border-bottom:2px solid #175cd3;">3. 学术论文精选与研究进展</div>
+  </td>
+  </tr>
+  <tr>
+  <td style="padding:12px 28px 6px;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%;border-collapse:collapse;">
+      {% for item in (r.p2_items + r.p3_items) %}
+      <tr>
+      <td style="padding:13px 0;border-bottom:1px solid #eaecf0;">
+        <div style="font-size:15px;font-weight:700;color:#101828;line-height:1.5;">
+          {{ item.title_cn if item.title_cn and item.title_cn != '未提及' else item.title }}
+        </div>
+        <div style="font-size:12px;color:#667085;padding-top:4px;line-height:1.6;font-style:italic;">{{ item.title }}</div>
+        <div style="padding:6px 0;font-size:12px;color:#475467;line-height:1.7;">
+          <span style="background-color:#e0eaff;color:#3538cd;padding:1px 6px;border-radius:3px;font-weight:600;">{{ item.priority }}</span>
+          {% if item.score %}<span style="padding-left:8px;">评分 {{ item.score }}</span>{% endif %}
+          <span style="padding-left:8px;">{{ item.source }}</span>
+          {% if item.published_at %}<span style="padding-left:8px;">发布 {{ item.published_at.strftime('%Y-%m-%d') }}</span>{% endif %}
+          {% if item.doi %}<span style="padding-left:8px;">DOI: {{ item.doi }}</span>{% endif %}
+          {% if item.authors %}<span style="padding-left:8px;">作者: {{ item.authors | join(', ') }}</span>{% endif %}
+        </div>
+        {% if item.summary_cn and item.summary_cn != '未提及' %}
+        <div style="padding:3px 0;font-size:14px;color:#344054;line-height:1.75;">{{ item.summary_cn }}</div>
+        {% endif %}
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%;margin-top:5px;">
+          {% if item.technique and item.technique != '未提及' %}
+          <tr><td style="padding:3px 0;font-size:13px;color:#475467;width:88px;vertical-align:top;">研究方法</td><td style="padding:3px 0;font-size:13px;color:#344054;">{{ item.technique }}</td></tr>
+          {% endif %}
+          {% if item.impact and item.impact != '未提及' %}
+          <tr><td style="padding:3px 0;font-size:13px;color:#475467;vertical-align:top;">主要结果</td><td style="padding:3px 0;font-size:13px;color:#344054;">{{ item.impact }}</td></tr>
+          {% endif %}
+          {% if item.recommendations and item.recommendations != '未提及' %}
+          <tr><td style="padding:3px 0;font-size:13px;color:#475467;vertical-align:top;">研究价值</td><td style="padding:3px 0;font-size:13px;color:#344054;">{{ item.recommendations }}</td></tr>
+          {% endif %}
+        </table>
+        <div style="padding:6px 0 0;font-size:13px;">
+          {% set link = safe_url(item.url) %}
+          {% if link %}
+          <a href="{{ link }}" target="_blank" style="color:#0b63ce;text-decoration:none;font-weight:600;">阅读原文 →</a>
+          {% endif %}
+        </div>
+      </td>
+      </tr>
+      {% endfor %}
+    </table>
+  </td>
+  </tr>
+  {% endif %}
+
+  <!-- 安全新闻与漏洞公告 -->
+  <tr>
+  <td style="padding:26px 28px 6px;">
+    <div style="font-size:16px;font-weight:700;color:#101828;padding-bottom:10px;border-bottom:2px solid #875bf7;">4. 安全新闻与漏洞公告</div>
+  </td>
+  </tr>
+  <tr>
+  <td style="padding:12px 28px 6px;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%;border-collapse:collapse;">
+      {% set security_items = r.p1_items | selectattr('source_type', 'equalto', 'vulnerability') | list + r.p1_items | selectattr('source_type', 'equalto', 'news') | list + r.p2_items | selectattr('source_type', 'equalto', 'news') | list %}
+      {% if security_items %}
+      {% for item in security_items %}
+      <tr>
+      <td style="padding:11px 0;border-bottom:1px solid #eaecf0;">
+        <div style="font-size:14px;font-weight:700;color:#101828;line-height:1.5;">
+          {% if item.cve_ids %}<span style="color:#b42318;">{{ item.cve_ids | join(', ') }}</span> — {% endif %}
+          {{ item.title_cn if item.title_cn and item.title_cn != '未提及' else item.title }}
+        </div>
+        <div style="padding:4px 0;font-size:12px;color:#475467;line-height:1.7;">
+          {{ item.source }}
+          {% if item.published_at %} · 发布 {{ item.published_at.strftime('%Y-%m-%d') }}{% endif %}
+          {% if item.score %} · 评分 {{ item.score }}{% endif %}
+        </div>
+        {% if item.summary_cn and item.summary_cn != '未提及' %}
+        <div style="padding:2px 0;font-size:13px;color:#344054;line-height:1.7;">{{ item.summary_cn }}</div>
+        {% endif %}
+        {% if item.impact and item.impact != '未提及' %}
+        <div style="padding:2px 0;font-size:13px;color:#475467;line-height:1.7;">影响: {{ item.impact }}</div>
+        {% endif %}
+        {% set link = safe_url(item.url) %}
+        {% if link %}
+        <div style="padding:5px 0 0;font-size:13px;"><a href="{{ link }}" target="_blank" style="color:#0b63ce;text-decoration:none;font-weight:600;">阅读原文 →</a></div>
+        {% endif %}
+      </td>
+      </tr>
+      {% endfor %}
+      {% else %}
+      <tr>
+      <td style="padding:8px 0;font-size:14px;color:#667085;line-height:1.7;">本期无新增的电信相关漏洞或安全公告。</td>
+      </tr>
+      {% endif %}
+    </table>
+  </td>
+  </tr>
+
+  <!-- 技术观察 -->
+  <tr>
+  <td style="padding:26px 28px 6px;">
+    <div style="font-size:16px;font-weight:700;color:#101828;padding-bottom:10px;border-bottom:2px solid #0e9384;">5. 本期技术观察</div>
+  </td>
+  </tr>
+  <tr>
+  <td style="padding:12px 28px 6px;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%;background-color:#f9fafb;border-left:3px solid #0e9384;border-radius:4px;">
+      <tr>
+      <td style="padding:14px 18px;font-size:14px;color:#344054;line-height:1.85;">
+        {% for observation in r.observations %}
+        <div style="padding:4px 0;">• {{ observation }}</div>
+        {% endfor %}
+        {% if not r.observations %}
+        <div style="padding:4px 0;color:#667085;">本期样本不足以归纳技术趋势。</div>
+        {% endif %}
+      </td>
+      </tr>
+    </table>
+    <div style="padding:8px 0 0;font-size:12px;color:#98a2b3;line-height:1.6;">
+      说明：以上观察基于本期样本归纳而来，仅反映本次检索范围内的内容分布，不构成行业共识。
+    </div>
+  </td>
+  </tr>
+
+  <!-- 来源索引 -->
+  <tr>
+  <td style="padding:26px 28px 6px;">
+    <div style="font-size:16px;font-weight:700;color:#101828;padding-bottom:10px;border-bottom:2px solid #667085;">6. 来源索引</div>
+  </td>
+  </tr>
+  <tr>
+  <td style="padding:12px 28px 24px;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%;border-collapse:collapse;font-size:13px;">
+      <tr>
+        <th align="left" style="padding:7px 8px 7px 0;font-size:12px;color:#667085;border-bottom:1px solid #eaecf0;font-weight:600;">标题</th>
+        <th align="left" style="padding:7px 8px;font-size:12px;color:#667085;border-bottom:1px solid #eaecf0;font-weight:600;white-space:nowrap;">来源</th>
+        <th align="left" style="padding:7px 0;font-size:12px;color:#667085;border-bottom:1px solid #eaecf0;font-weight:600;white-space:nowrap;">日期</th>
+      </tr>
+      {% for item in r.all_items %}
+      <tr>
+        <td style="padding:7px 8px 7px 0;color:#344054;border-bottom:1px solid #f2f4f7;line-height:1.6;">
+          {% set link = safe_url(item.url) %}
+          {% if link %}
+          <a href="{{ link }}" target="_blank" style="color:#344054;text-decoration:none;">{{ item.title_cn if item.title_cn and item.title_cn != '未提及' else item.title }}</a>
+          {% else %}
+          {{ item.title_cn if item.title_cn and item.title_cn != '未提及' else item.title }}
+          {% endif %}
+        </td>
+        <td style="padding:7px 8px;color:#667085;border-bottom:1px solid #f2f4f7;">{{ item.source }}</td>
+        <td style="padding:7px 0;color:#667085;border-bottom:1px solid #f2f4f7;white-space:nowrap;">{{ item.published_at.strftime('%Y-%m-%d') if item.published_at else '待核实' }}</td>
+      </tr>
+      {% endfor %}
+    </table>
+  </td>
+  </tr>
+
+  {% endif %}
+
+  <!-- 页脚 -->
+  <tr>
+  <td style="background-color:#f9fafb;padding:18px 28px;border-top:1px solid #eaecf0;">
+    <div style="font-size:12px;color:#98a2b3;line-height:1.8;">
+      本报告由「核心网信令安全情报自动订阅系统」自动生成，生成时间 {{ generated_at }}。<br>
+      内容摘要由大模型基于原始文献与公告生成，可能存在偏差，关键结论请以原文为准。所有条目均保留原始链接以便追溯。<br>
+      评分仅用于内容排序与筛选，不代表客观、绝对的风险等级。
+    </div>
+  </td>
+  </tr>
+
+</table>
+</td>
+</tr>
+</table>
+</body>
+</html>

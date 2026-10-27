@@ -15,10 +15,13 @@ data/
 *.sqlite
 *.sqlite3
 
-# 运行时产物
-logs/
+# 运行时产物（只忽略项目根下的输出目录，避免误伤 signalintel/reports/ 包）
+/logs/
 *.log
-reports/
+/reports/
+
+# 生成的 HTML 报告（不含源码目录下的模板）
+/data/**/*.html
 *.html
 !signalintel/reports/templates/*.html
 
