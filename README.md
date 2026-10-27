@@ -13,6 +13,7 @@
 
 - [快速开始](#快速开始)
 - [配置说明](#配置说明)
+- [常驻服务](#常驻服务一条命令)
 - [常用命令](#常用命令)
 - [自动化部署](#自动化部署)
 - [系统架构](#系统架构)
@@ -189,6 +190,82 @@ bash scripts/install_cron.sh
 
 ---
 
+## 常驻服务（一条命令）
+
+`app.py serve` 一条命令同时启动**周期调度**和 **HTTP 归档页面**：
+
+```bash
+# 前台运行（推荐用于 systemd / 容器）
+python3 app.py serve
+
+# 后台运行
+bash scripts/start_service.sh --daemon
+```
+
+启动后：
+
+- **调度**：按 `config/schedule.yaml` 周期执行「采集 → 分析 → 生成报告 → 归档 → 发邮件」
+- **HTTP**：<http://127.0.0.1:8765/> 展示最近一期及历史各期，支持翻页
+
+### config/schedule.yaml
+
+```yaml
+schedule:
+  enabled: true
+  frequency: weekly        # daily / weekly / monthly
+  run_at: "08:30"
+  weekday: monday          # weekly 专用
+  day_of_month: 1          # monthly 专用
+  timezone: Asia/Shanghai
+  catch_up: false          # 启动时错过当期是否立即补跑
+  continue_on_error: true  # 单次失败后是否继续等下一次
+
+web:
+  enabled: true
+  host: 127.0.0.1          # 改 0.0.0.0 可对外访问（注意加访问控制）
+  port: 8765
+  page_size: 10
+```
+
+### HTTP 页面
+
+| 路径 | 说明 |
+|---|---|
+| `/` | 报告列表，按期倒序，支持 `?page=N` 翻页、`?size=N` 改每页条数 |
+| `/r/<日期>` | 某期报告全文 |
+| `/api/reports` | JSON：全部报告摘要 |
+| `/api/report/<日期>` | JSON：某期详情（含条目） |
+| `/api/status` | JSON：服务状态 |
+| `/healthz` | 健康检查 |
+
+### 归档存储（不依赖数据库）
+
+每期报告存为一个目录，纯文件、易备份：
+
+```
+data/archive/
+  2026-10-19/
+    report.html      # 完整 HTML 报告
+    meta.json        # 统计、条目摘要、主题
+  2026-10-12/
+    ...
+```
+
+一年 52 期 = 52 个目录。想清理就删目录，不影响其它期。
+**HTTP 页面只读这个目录**，不查数据库。
+
+### 命令行覆盖
+
+```bash
+python3 app.py serve --port 8080      # 覆盖端口
+python3 app.py serve --host 0.0.0.0   # 对外监听
+python3 app.py serve --no-schedule    # 只提供 HTTP 页面
+python3 app.py serve --no-web         # 只跑调度
+python3 app.py serve --run-now        # 立即先跑一次，再常驻
+```
+
+---
+
 ## 常用命令
 
 ```bash
@@ -215,6 +292,9 @@ python3 app.py status
 
 # 初始化数据库
 python3 app.py init
+
+# 启动常驻服务（周期调度 + HTTP 归档页面）
+python3 app.py serve
 ```
 
 脚本层：
@@ -400,7 +480,7 @@ python3 app.py status                  # 最近任务状态
 python3 -m pytest tests/ -q
 ```
 
-169 项测试，全部使用 mock，**不发起真实网络请求**。真实链路验证用：
+200 项测试，全部使用 mock，**不发起真实网络请求**。真实链路验证用：
 
 ```bash
 python3 scripts/smoke_e2e.py --days 7
