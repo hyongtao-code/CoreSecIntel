@@ -26,7 +26,14 @@ from signalintel.archive import ArchivedReport, ReportArchive
 
 logger = logging.getLogger(__name__)
 
-__all__ = ["WebServer", "create_server"]
+__all__ = ["WebServer", "create_server", "DEFAULT_PORTS"]
+
+#: 默认端口候选，按优先级排列，第一个能绑定的即生效。
+#:
+#: 80 是 HTTP 标准端口 —— 用户在浏览器只输 IP 就能访问，无需记端口号。
+#: 但绑定 80 需要 root 或 ``CAP_NET_BIND_SERVICE``，因此无权限时
+#: 自动降级到 8080，再不行降到 8765，保证在容器等受限环境也能跑起来。
+DEFAULT_PORTS: tuple[int, ...] = (80, 8080, 8765)
 
 #: 列表页每页条数
 DEFAULT_PAGE_SIZE = 10
@@ -306,19 +313,72 @@ def create_server(
 
 
 class WebServer:
-    """HTTP 服务封装（可在后台线程运行）。"""
+    """HTTP 服务封装（可在后台线程运行）。
+
+    端口选择：
+
+    - ``port`` 显式指定 → 直接用它（失败则抛出，由调用方决定）
+    - ``port=0`` → 端口自动选择（系统分配），用于测试
+    - ``port=None`` → 按 :data:`DEFAULT_PORTS` 顺序尝试绑定，
+      80（标准端口，免端口号）→ 8080 → 8765
+    """
 
     def __init__(
         self,
         archive: ReportArchive,
         host: str = "127.0.0.1",
-        port: int = 8765,
+        port: Optional[int] = None,
+        port_candidates: tuple[int, ...] = DEFAULT_PORTS,
+        strict: bool = False,
     ) -> None:
         self.archive = archive
         self.host = host
         self.requested_port = port
-        self._server = create_server(archive, host, port)
+        self.port_fallbacks: list[str] = []
+        #: strict=True 时端口不可用直接报错（用户显式指定端口的场景）
+        self.strict = strict
+
+        self._server = self._bind(port, port_candidates)
         self._thread: Optional[threading.Thread] = None
+
+    def _bind(
+        self, port: Optional[int], candidates: tuple[int, ...]
+    ) -> ThreadingHTTPServer:
+        """绑定监听端口，必要时按候选列表降级。
+
+        - ``port=None``：按 ``candidates`` 顺序尝试
+        - ``port=0``：系统随机分配（测试用）
+        - ``port>0`` 且 ``strict=False``：先试该端口，失败则降级到候选列表
+        - ``port>0`` 且 ``strict=True``：失败直接报错
+        """
+        if port == 0:
+            return create_server(self.archive, self.host, 0)
+
+        if port is not None:
+            try:
+                return create_server(self.archive, self.host, port)
+            except OSError as exc:
+                if self.strict:
+                    raise
+                self.port_fallbacks.append(f"{port}（{exc.strerror or exc}）")
+        else:
+            port = None
+
+        last_error: Optional[OSError] = None
+        for candidate in candidates:
+            if candidate == self.requested_port:
+                continue
+            try:
+                return create_server(self.archive, self.host, candidate)
+            except OSError as exc:
+                self.port_fallbacks.append(f"{candidate}（{exc.strerror or exc}）")
+                last_error = exc
+                continue
+
+        raise OSError(
+            f"无法绑定任何候选端口 {list(candidates)}："
+            f"{'；'.join(self.port_fallbacks)}"
+        ) from last_error
 
     @property
     def port(self) -> int:
@@ -327,7 +387,41 @@ class WebServer:
 
     @property
     def url(self) -> str:
+        """完整 URL（含端口）。"""
         return f"http://{self.host}:{self.port}/"
+
+    @property
+    def display_url(self) -> str:
+        """给用户看的 URL —— 80 端口省略端口号。
+
+        监听 0.0.0.0 时显示实际可访问的本机地址，便于用户直接复制。
+        """
+        host = self.host
+        if host in ("0.0.0.0", "::"):
+            host = self.lan_ip() or "localhost"
+        if self.port == 80:
+            return f"http://{host}/"
+        return f"http://{host}:{self.port}/"
+
+    @staticmethod
+    def lan_ip() -> Optional[str]:
+        """探测本机在局域网中的 IP（仅用于展示）。"""
+        import socket
+
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        try:
+            # 不实际发包，靠路由表判断出网网卡
+            sock.connect(("10.255.255.255", 1))
+            return sock.getsockname()[0]
+        except OSError:
+            return None
+        finally:
+            sock.close()
+
+    @property
+    def is_standard_port(self) -> bool:
+        """是否监听在标准 HTTP 端口（浏览器只需输 IP）。"""
+        return self.port == 80
 
     def serve_forever(self) -> None:
         """阻塞式运行（供主线程使用）。"""
@@ -342,15 +436,19 @@ class WebServer:
         self._thread.start()
 
     def shutdown(self) -> None:
-        """停止服务。"""
-        try:
-            self._server.shutdown()
-        except Exception:  # noqa: BLE001
-            pass
+        """停止服务。
+
+        注意：``BaseServer.shutdown()`` 只有在 ``serve_forever()`` 正在运行时
+        才能返回，否则会永久阻塞。因此先判断服务循环是否已启动。
+        """
+        if self._thread is not None:
+            try:
+                self._server.shutdown()
+            except Exception:  # noqa: BLE001
+                pass
+            self._thread.join(timeout=5)
+            self._thread = None
         try:
             self._server.server_close()
         except Exception:  # noqa: BLE001
             pass
-        if self._thread is not None:
-            self._thread.join(timeout=5)
-            self._thread = None

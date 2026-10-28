@@ -205,7 +205,30 @@ bash scripts/start_service.sh --daemon
 启动后：
 
 - **调度**：按 `config/schedule.yaml` 周期执行「采集 → 分析 → 生成报告 → 归档 → 发邮件」
-- **HTTP**：<http://127.0.0.1:8765/> 展示最近一期及历史各期，支持翻页
+- **HTTP**：展示最近一期及历史各期，支持翻页
+
+### 让浏览器只需输入 IP（免端口号）
+
+服务默认监听 **80 端口**（HTTP 标准端口），浏览器直接输入 `http://<服务器IP>/` 即可，
+无需记端口号。绑定 80 需要 `CAP_NET_BIND_SERVICE` 能力：
+
+```bash
+# 1) 建项目专用虚拟环境（--copies 必须是真实文件，符号链接无法加能力）
+python3 -m venv --copies .venv
+.venv/bin/python3 -m pip install -r requirements.txt
+
+# 2) 给项目解释器加能力（只需执行一次，需 sudo）
+sudo setcap 'cap_net_bind_service=+ep' $(pwd)/.venv/bin/python3
+
+# 3) 用 venv 启动
+.venv/bin/python3 app.py serve
+```
+
+服务仍以**普通用户**运行，只获得「绑定特权端口」这一项能力，不获得 root 权限。
+
+**没有 sudo 也能跑**：程序会自动降级 —— 80 → 8080 → 8765，
+并在启动日志里说明实际使用的端口。此时浏览器需带上端口号，
+例如 <http://192.168.0.104:8080/>。
 
 ### config/schedule.yaml
 

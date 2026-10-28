@@ -368,7 +368,9 @@ def cmd_serve(args: argparse.Namespace, config: AppConfig) -> int:
         web_raw["enabled"] = False
     if getattr(args, "host", None):
         web_raw["host"] = args.host
-    if getattr(args, "port", None):
+    # 命令行显式指定端口 → 严格模式（不可用就直接报错，不擅自改端口）
+    strict_port = getattr(args, "port", None) is not None
+    if strict_port:
         web_raw["port"] = args.port
 
     try:
@@ -399,11 +401,32 @@ def cmd_serve(args: argparse.Namespace, config: AppConfig) -> int:
     if web_raw.get("enabled", True):
         host = str(web_raw.get("host", "127.0.0.1"))
         port = int(web_raw.get("port", 8765))
-        web_server = WebServer(archive, host=host, port=port)
+        web_server = WebServer(
+            archive, host=host, port=port, strict=strict_port
+        )
         web_server.start_background()
-        logger.info("HTTP 服务: %s", web_server.url)
-        logger.info("  列表页 : %s", web_server.url)
-        logger.info("  最新一期: %s/r/%s", web_server.url, existing[0].report_date if existing else "<待生成>")
+        if web_server.port_fallbacks:
+            logger.warning(
+                "以下端口不可用，已自动降级: %s",
+                "、".join(web_server.port_fallbacks),
+            )
+        logger.info("HTTP 服务已启动: %s", web_server.display_url)
+        logger.info("  列表页  : %s", web_server.display_url)
+        logger.info(
+            "  最新一期: %s", f"{web_server.display_url}r/{existing[0].report_date}"
+            if existing
+            else f"{web_server.display_url}r/<待生成>",
+        )
+        if web_server.is_standard_port:
+            logger.info(
+                "  浏览器直接输入 %s 即可访问（80 端口，无需端口号）",
+                web_server.display_url,
+            )
+        else:
+            logger.info(
+                "  浏览器访问 %s （如需免端口号，可给 .venv 解释器设置 CAP_NET_BIND_SERVICE）",
+                web_server.display_url,
+            )
     else:
         logger.info("HTTP 服务已禁用")
 

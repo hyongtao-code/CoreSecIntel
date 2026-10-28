@@ -16,7 +16,15 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 cd "$PROJECT_DIR"
 
-PYTHON="${PYTHON:-python3}"
+# 优先使用项目 venv —— 若对其设置了 CAP_NET_BIND_SERVICE，
+# 才能绑定 80 端口（免端口号访问）。没有 venv 时退回系统 python3。
+if [[ -z "${PYTHON:-}" ]]; then
+    if [[ -x "$PROJECT_DIR/.venv/bin/python3" ]]; then
+        PYTHON="$PROJECT_DIR/.venv/bin/python3"
+    else
+        PYTHON="python3"
+    fi
+fi
 PID_FILE="${PID_FILE:-$PROJECT_DIR/logs/service.pid}"
 LOG_DIR="${LOG_DIR:-$PROJECT_DIR/logs}"
 mkdir -p "$LOG_DIR"
@@ -36,6 +44,15 @@ if [[ -f "$PID_FILE" ]] && kill -0 "$(cat "$PID_FILE")" 2>/dev/null; then
     echo "服务已在运行（PID $(cat "$PID_FILE")）"
     echo "  停止: kill \$(cat $PID_FILE)"
     exit 0
+fi
+
+# 绑定 80 端口的能力提示（非致命）
+if [[ -x "$PROJECT_DIR/.venv/bin/python3" ]] \
+   && ! getcap "$PROJECT_DIR/.venv/bin/python3" 2>/dev/null | grep -q net_bind_service; then
+    echo "提示: .venv 尚未获得绑定 80 端口的能力，将自动降级到 8080 端口。"
+    echo "      如需免端口号访问，执行:"
+    echo "        sudo setcap 'cap_net_bind_service=+ep' $PROJECT_DIR/.venv/bin/python3"
+    echo ""
 fi
 
 if [[ -n "$DAEMON" ]]; then

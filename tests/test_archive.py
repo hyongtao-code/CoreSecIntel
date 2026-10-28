@@ -370,6 +370,132 @@ def test_web_unknown_path_returns_404(server):
         assert exc.code == 404
 
 
+def test_web_display_url_omits_standard_port(tmp_path):
+    """80 端口时展示 URL 不带端口号（浏览器只需输 IP）。"""
+    from signalintel.webserver import WebServer
+
+    archive = ReportArchive(tmp_path / "archive")
+    archive.save(_report_data(), "<html>x</html>", "t")
+
+    # 用 80 端口不可用时无法测试，直接验证 URL 生成规则
+    web = WebServer(archive, host="192.168.0.104", port=0)
+    try:
+        assert web.port != 80
+        assert web.display_url == f"http://192.168.0.104:{web.port}/"
+        assert web.is_standard_port is False
+    finally:
+        web.shutdown()
+
+
+def test_web_falls_back_when_port_unavailable(tmp_path):
+    """首选端口不可用时自动降级到候选列表中的下一个。"""
+    from signalintel.webserver import WebServer
+
+    archive = ReportArchive(tmp_path / "archive")
+    archive.save(_report_data(), "<html>x</html>", "t")
+
+    # 先占住一个端口，让它必然不可用
+    import socket
+
+    blocker = socket.socket()
+    blocker.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    blocker.bind(("127.0.0.1", 0))
+    blocker.listen(1)
+    taken = blocker.getsockname()[1]
+    try:
+        web = WebServer(
+            archive,
+            host="127.0.0.1",
+            port=None,
+            port_candidates=(taken, 0),
+        )
+        try:
+            assert web.port == 0 or web.port != taken
+            assert web.port_fallbacks, "应记录被跳过的端口"
+            assert str(taken) in web.port_fallbacks[0]
+        finally:
+            web.shutdown()
+    finally:
+        blocker.close()
+
+
+def test_web_explicit_port_failure_raises_when_strict(tmp_path):
+    """strict=True（用户显式 --port）时端口不可用应抛错，不擅自改端口。"""
+    import socket
+
+    from signalintel.webserver import WebServer
+
+    archive = ReportArchive(tmp_path / "archive")
+    archive.save(_report_data(), "<html>x</html>", "t")
+
+    blocker = socket.socket()
+    blocker.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    blocker.bind(("127.0.0.1", 0))
+    blocker.listen(1)
+    taken = blocker.getsockname()[1]
+    try:
+        try:
+            WebServer(archive, host="127.0.0.1", port=taken, strict=True)
+            assert False, "应当抛错"
+        except OSError:
+            pass
+    finally:
+        blocker.close()
+
+
+def test_web_explicit_port_falls_back_when_not_strict(tmp_path):
+    """非 strict 时，显式端口不可用会降级到候选端口（保证服务能起来）。"""
+    import socket
+
+    from signalintel.webserver import WebServer
+
+    archive = ReportArchive(tmp_path / "archive")
+    archive.save(_report_data(), "<html>x</html>", "t")
+
+    blocker = socket.socket()
+    blocker.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    blocker.bind(("127.0.0.1", 0))
+    blocker.listen(1)
+    taken = blocker.getsockname()[1]
+    try:
+        web = WebServer(
+            archive,
+            host="127.0.0.1",
+            port=taken,
+            port_candidates=(0,),
+            strict=False,
+        )
+        try:
+            assert web.port != taken
+            assert web.port_fallbacks
+        finally:
+            web.shutdown()
+    finally:
+        blocker.close()
+
+
+def test_web_config_port_80_falls_back_when_unprivileged(tmp_path):
+    """配置文件写 80 但无权限时，应自动降级而不是启动失败。"""
+    from signalintel.webserver import WebServer
+
+    archive = ReportArchive(tmp_path / "archive")
+    archive.save(_report_data(), "<html>x</html>", "t")
+
+    web = WebServer(
+        archive,
+        host="127.0.0.1",
+        port=80,
+        port_candidates=(0,),
+        strict=False,
+    )
+    try:
+        assert web.port != 80
+        assert web.port_fallbacks
+        assert "80" in web.port_fallbacks[0]
+    finally:
+        web.shutdown()
+
+
 def test_web_escapes_report_content(server):
     """归档中的内容必须转义，防止 HTML 注入。"""
     from signalintel.webserver import WebServer
